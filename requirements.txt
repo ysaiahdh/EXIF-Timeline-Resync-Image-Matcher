@@ -1,0 +1,4 @@
+# Dépendances requises uniquement pour l'option de matching d'images (-r / --reference)
+torch
+torchvision
+Pillow
