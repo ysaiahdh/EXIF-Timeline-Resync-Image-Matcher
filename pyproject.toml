@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exif-timeline-resync"
+version = "2.0.0"
+description = "Restore EXIF timestamps and chronology for photos downloaded from blogs, school sites, or vacation camp websites."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Ysaïah DH" }]
+requires-python = ">=3.8"
+keywords = ["exif", "photos", "metadata", "datetime", "chronology", "image-matching"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+ai = ["torch", "torchvision", "Pillow", "numpy"]
+hash = ["Pillow", "ImageHash"]
+progress = ["tqdm"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+exif-resync = "exif_resync:main"
+
+[project.urls]
+Homepage = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher"
+Documentation = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher#readme"
+Issues = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher/issues"
+
+[tool.setuptools]
+py-modules = ["exif_resync"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["UP007", "UP035", "UP006"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

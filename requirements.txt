@@ -1,8 +1,20 @@
-# Dependencies required only for the image matching option (-r / --reference)
-# Dépendances requises uniquement pour l'option de matching d'images (-r / --reference)
+# The tool itself only needs the Python standard library.
 #
-# Tip / Astuce : on CPU-only machines you can save disk space with:
-# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Optional extras (install what you need):
+#
+#   AI image matching (ResNet-18, best quality):
+#     pip install torch torchvision Pillow numpy
+#     Tip: on CPU-only machines, save disk space with:
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#
+#   Lightweight matching (perceptual hash, tiny download):
+#     pip install Pillow ImageHash
+#
+#   Progress bars:
+#     pip install tqdm
+#
+# This file installs everything needed for full AI matching (-r / --reference):
 torch
 torchvision
 Pillow
+numpy

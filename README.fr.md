@@ -2,105 +2,89 @@
 
 [English](README.md) | [Français](README.fr.md)
 
-Restaurez les horodatages EXIF et la chronologie de photos téléchargées
-depuis des blogs, des sites d'écoles ou de colonies de vacances.
+J'ai écrit cet outil après avoir téléchargé quelques centaines de photos
+depuis le site d'une colonie de vacances. Toutes étaient datées du jour du
+téléchargement. Les articles du blog racontaient le séjour jour par jour, les
+noms de dossiers contenaient les dates, mais les fichiers eux-mêmes avaient
+perdu toute notion du temps. Les trier à la main n'était pas envisageable.
 
-Lorsque vous téléchargez des photos depuis des plateformes web (WordPress,
-Blogger, Wix, etc.), les données EXIF d'origine (`DateTimeOriginal`) sont
-généralement supprimées. Toutes les photos se retrouvent datées du jour du
-téléchargement et perdent leur ordre chronologique.
+Ce script remet la chronologie en place. Il lit les dates cachées dans vos
+noms de dossiers, les combine avec un petit fichier de planning et les
+descriptions texte sauvegardées à côté des photos, puis réécrit des
+horodatages EXIF corrects dans chaque image. Et si vous avez aussi pris vos
+propres photos pendant ces événements (avec un téléphone ou un appareil dont
+l'heure est juste), il peut même comparer les images visuellement et copier
+la seconde exacte de la prise de vue.
 
-**EXIF Timeline Resync** résout ce problème en combinant **la structure des
-dossiers**, un **planning JSON**, **les descriptions textuelles du blog** et
-**la reconnaissance d'images par IA** à partir de vos propres photos de
-référence.
+Comme il modifie des métadonnées, tout ce qu'il fait est consigné dans un
+rapport CSV que vous pouvez rejouer avec `--undo` si le résultat ne vous
+plaît pas.
 
-Chaque exécution produit également un **rapport de modifications (CSV)** qui
-permet de vérifier — ou d'**annuler** complètement — tout ce que l'outil a
-écrit.
+## Ce qu'il sait faire
 
----
+- Reconstruire des heures de prise de vue réalistes depuis des noms de
+  dossiers comme `01-05 Kayak` et un planning JSON
+- Espacer les photos de quelques minutes pour éviter les horodatages identiques
+- Stocker les descriptions `.txt` du blog dans `ImageDescription`
+- Repérer les mots-clés (`boom`, `soiree`, `animaux`...) et décaler les albums
+  du soir ou de l'après-midi en conséquence
+- Utiliser les horodatages trouvés dans les noms de fichiers quand ils
+  existent (`IMG_20260501_143022.jpg`)
+- Comparer vos téléchargements à vos propres photos de référence datées, avec
+  un réseau ResNet-18 ou avec un simple hachage perceptuel
+- Détecter une horloge d'appareil déréglée (et corriger tout l'album avec une
+  seule option)
+- Tout prévisualiser avec `--dry-run`, générer une chronologie HTML, repérer
+  les doublons entre albums, et annuler n'importe quelle exécution
 
-## Fonctionnalités
+## Ce qu'il faut
 
-- **Reconstruction intelligente des heures** : calcule des heures de prise
-  de vue réalistes à partir des noms de dossiers datés et de votre planning.
-- **Incrémentation séquentielle** : évite les horodatages en double en
-  appliquant un pas de temps dynamique entre chaque photo d'un album.
-- **Intégration des résumés texte** : lit les fichiers `.txt` de description
-  du blog et écrit leur contenu dans le tag EXIF `ImageDescription`.
-- **Analyse contextuelle** : ajuste les créneaux horaires selon des mots-clés
-  (boom, soiree, apres-midi, safari, etc.).
-- **Reconnaissance et alignement d'images (optionnel)** : compare les photos
-  téléchargées avec vos propres photos de smartphone (déjà datées) via un
-  réseau de neurones ResNet-18 pour aligner les horodatages à la seconde.
-- **Garde de cohérence** : valide les correspondances visuelles en vérifiant
-  la similarité cosinus (seuil de 85 %) **et** la correspondance du jour dans
-  le planning.
-- **Mode simulation (--dry-run)** : prévisualise tous les horodatages calculés
-  sans modifier le moindre fichier.
-- **Rapport de modifications & annulation** : chaque exécution réelle enregistre
-  un rapport CSV ancien → nouveau ; restaurez les valeurs d'origine à tout moment
-  avec `--undo`.
+- Python 3.8 ou plus récent
+- [ExifTool](https://exiftool.org/). Sous Linux : `sudo apt install
+  libimage-exiftool-perl`. Sous macOS : `brew install exiftool`. Sous Windows,
+  téléchargez-le sur le site et déposez `exiftool.exe` dans ce dossier.
+- Pour la reconnaissance d'images seulement :
+  - la voie royale : `pip install torch torchvision Pillow numpy`
+    (sur une machine sans GPU,
+    `--index-url https://download.pytorch.org/whl/cpu` économise beaucoup de
+    disque pour torch)
+  - ou la version légère : `pip install Pillow ImageHash`
 
----
-
-## Prérequis
-
-1. **Python 3.8+**
-2. **ExifTool** : requis pour lire et écrire les tags EXIF.
-   - **Windows** : téléchargez la distribution complète depuis
-     [exiftool.org](https://exiftool.org/) et placez `exiftool.exe` à la
-     racine du projet (ou ajoutez-le à votre `PATH`).
-   - **Linux** : `sudo apt install libimage-exiftool-perl`
-     (ou `sudo dnf install perl-Image-ExifTool`)
-   - **macOS** : `brew install exiftool`
-3. *(Optionnel)* **PyTorch + torchvision** : nécessaire uniquement pour la
-   reconnaissance d'images avec `-r/--reference`. Voir `requirements.txt`.
-
-Vérifiez qu'ExifTool fonctionne :
-
-```bash
-exiftool -ver
-```
-
----
+Vérifiez qu'ExifTool répond avec `exiftool -ver`.
 
 ## Installation
+
+Clonez et lancez, c'est tout :
 
 ```bash
 git clone https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher.git
 cd EXIF-Timeline-Resync-Image-Matcher
-
-# Optionnel : activer la reconnaissance d'images par IA
-pip install -r requirements.txt
+python exif_resync.py --help
 ```
 
-> Sous Windows, pensez à placer `exiftool.exe` dans ce dossier s'il n'est pas
-> dans votre `PATH`.
+Une installation classique fonctionne aussi :
 
----
+```bash
+pip install .
+exif-resync --help
+```
 
 ## Démarrage rapide
 
-### 1. Préparez vos photos
-
-Rangez les téléchargements dans des dossiers dont le nom contient une date
-jour-mois (`JJ-MM`, éventuellement suivie d'une heure comme `14h30`) :
+Rangez vos téléchargements dans des dossiers dont le nom commence par une date
+jour-mois :
 
 ```
 photos/
 ├── 01-05 Parc aquatique/
 │   ├── IMG_001.jpg
 │   ├── IMG_002.jpg
-│   └── resume.txt          <- optionnel : stocké dans ImageDescription
+│   └── resume.txt        <- optionnel, devient ImageDescription
 ├── 02-05 Safari 14h30/
-│   └── ...
 └── 03-05 Soiree boom/
-    └── ...
 ```
 
-### 2. Créez votre planning
+Copiez la config d'exemple et adaptez-la :
 
 ```bash
 cp config.example.json config_planning.json
@@ -112,185 +96,159 @@ cp config.example.json config_planning.json
   "default_interval_sec": 180,
   "schedule": {
     "01-05": "09:00",
-    "02-05": "08:30",
-    "03-05": "10:00"
+    "02-05": "08:30"
   }
 }
 ```
 
-| Clé anglaise | Clé française | Description |
-|---|---|---|
-| `year` | `annee` | Année appliquée à toutes les dates reconstruites. |
-| `default_interval_sec` | `intervalle_defaut_sec` | Secondes ajoutées entre deux photos consécutives quand aucune règle spéciale ne s'applique (défaut : `180`). |
-| `schedule` | `planning` | Associe chaque date `"JJ-MM"` de dossier à l'heure de début de l'activité `"HH:MM"`. |
-
-Les clés anglaises et françaises sont acceptées, mais ne les mélangez pas
-au sein d'un même fichier.
-
-### 3. Simulez, puis appliquez
-
-Commencez toujours par une simulation :
+Les clés françaises fonctionnent aussi (`annee`, `intervalle_defaut_sec`,
+`planning`) ; évitez simplement de mélanger les deux langues dans un même
+fichier. Vous pouvez vérifier votre configuration sans rien toucher :
 
 ```bash
-python exif_resync.py -d ./photos --dry-run
+python exif_resync.py -d ./photos --check-config
 ```
 
-Puis écrivez réellement les métadonnées :
+Puis simulez, appliquez, et contrôlez :
 
 ```bash
+python exif_resync.py -d ./photos --dry-run --timeline
 python exif_resync.py -d ./photos
+open photos/timeline.html      # voir ce qui a été écrit
 ```
 
-Si quelque chose cloche, annulez :
+Vous avez changé d'avis ?
 
 ```bash
 python exif_resync.py --undo ./photos/exif_resync_report.csv
 ```
 
----
+L'annulation restaure exactement les valeurs précédentes, y compris la
+suppression des tags qui n'existaient pas avant.
 
 ## Comment les heures sont choisies
 
-Pour chaque dossier album, une heure de début est choisie selon cet ordre de
-priorité :
+Pour chaque album, l'heure de départ vient de la première règle qui s'applique :
 
-1. **Mots-clés de soirée** (`boom` dans le nom du dossier, `soiree`/`veillee`
-   dans la description texte) → départ à **20h30**, 90 s entre photos.
-2. **Mots-clés d'après-midi** (`bis`, `animaux`, `apres-midi` dans le nom du
-   dossier) → départ à **15h00**, 120 s entre photos.
-3. **Votre planning** (entrée `schedule` pour ce jour) → départ à l'heure
-   configurée, 210 s entre photos.
-4. **Heure dans le nom du dossier** (`02-05 Safari 14h30` → 14h30).
-5. **Par défaut** → 12h00, avec `default_interval_sec` entre photos.
+1. `boom` dans le nom du dossier, ou `soiree` / `veillee` dans le texte →
+   20h30, 90 secondes entre photos
+2. `bis`, `animaux` ou `apres-midi` dans le nom du dossier → 15h00,
+   120 secondes
+3. une entrée pour ce jour dans votre planning → l'heure configurée,
+   210 secondes
+4. une heure écrite dans le nom du dossier (`02-05 Safari 14h30`) → cette heure
+5. sinon 12h00, espacées de `default_interval_sec`
 
-Chaque photo suivante reçoit `heure_début + n × intervalle`, garantissant des
-horodatages strictement croissants et sans doublon au sein d'un album.
+Chaque photo reçoit ensuite `début + n × intervalle`, donc les horodatages
+restent strictement croissants au sein d'un album. Un horodatage trouvé dans
+un nom de fichier passe toujours devant tout le reste : l'appareil photo
+savait mieux que nous.
 
----
+## Comparer avec vos propres photos
 
-## Reconnaissance d'images par IA (optionnel)
-
-Avez-vous *vos propres* photos des mêmes événements, prises au téléphone ou
-à l'appareil photo (donc encore correctement datées) ? Placez-les dans un
-dossier et lancez :
+Si vous étiez là aussi et que vos clichés ont encore des dates EXIF correctes,
+montrez-les à l'outil :
 
 ```bash
 python exif_resync.py -d ./photos -r ./mes_photos_reference
 ```
 
-Fonctionnement :
+Chaque téléchargement est comparé à toutes les photos de référence. Quand la
+meilleure correspondance est assez convaincante *et* tombe le même jour que
+l'album, son horodatage exact est recopié. Deux moteurs sont disponibles :
 
-1. Chaque photo de référence est transformée en vecteur de caractéristiques
-   par un réseau ResNet-18 (pré-entraîné sur ImageNet).
-2. Chaque photo téléchargée est transformée de la même manière.
-3. Le vecteur de référence le plus proche est trouvé par similarité cosinus.
-4. Une correspondance n'est acceptée que si la similarité ≥ **0,85** *et* si
-   la référence a été prise à ±1 jour de la date de l'album — cette double
-   vérification évite les faux positifs.
-5. Les correspondances acceptées copient l'horodatage exact de la référence
-   (à la seconde près).
+| Mode | Prérequis | Remarques |
+|---|---|---|
+| `--matcher resnet` | torch, torchvision, Pillow | meilleure qualité, ~45 Mo de poids téléchargés au premier usage |
+| `--matcher hash` | Pillow, ImageHash | minuscule et rapide, repère les cas évidents |
+| `--matcher auto` | l'un des deux | choisit resnet si installé, sinon hash |
+| `--matcher off` | rien | mode planning seul |
 
-Remarques :
+En bonus, les comparaisons confrontent aussi les albums entre eux et écrivent
+`duplicates_report.csv` quand deux photos de dossiers différents sont
+identiques.
 
-- La première exécution télécharge les poids ResNet-18 (~45 Mo), un accès
-  internet est donc nécessaire une fois.
-- Sans PyTorch installé, l'outil bascule automatiquement en mode planning seul.
-- La reconnaissance tourne par défaut sur CPU, à raison d'environ 5 à
-  10 images/seconde.
+Les photos de référence ne sont analysées qu'une fois et mises en cache à
+côté de leur dossier, les exécutions suivantes démarrent instantanément.
 
----
+## Horloges d'appareil déréglées
 
-## Rapport de modifications & annulation
-
-Chaque exécution réelle (hors --dry-run) écrit
-`<dossier>/exif_resync_report.csv` contenant, par photo :
-
-| Colonne | Signification |
-|---|---|
-| `path` | Chemin absolu de la photo. |
-| `old_datetimeoriginal` / `old_createdate` / `old_modifydate` | Dates EXIF précédentes (`-` = aucune). |
-| `old_imagedescription` | Description précédente (`-` = aucune). |
-| `new_datetime` | Horodatage écrit par l'outil. |
-| `new_imagedescription` | Description écrite par l'outil. |
-| `match_score` | Similarité cosinus de la correspondance visuelle (vide si non utilisée). |
-
-Pour restaurer l'état précédent :
+Il arrive que les photos qui ont *conservé* leur EXIF contredisent le
+planning, parce que l'horloge de l'appareil était fausse. L'outil le remarque :
+si au moins deux photos d'un album portent des horodatages décalés de manière
+cohérente par rapport aux heures calculées, il vous dit de combien. Rien ne
+bouge sans votre accord :
 
 ```bash
-python exif_resync.py --undo ./photos/exif_resync_report.csv
+python exif_resync.py -d ./photos --sync-clocks
 ```
 
-Conservez un rapport par session — chaque nouvelle exécution écrase le nom de
-rapport par défaut, ou utilisez `--report ma_session.csv` pour le contrôler
-vous-même.
+Cette option décale tout l'album de l'écart médian détecté. Les horodatages
+issus des noms de fichiers ne sont pas touchés.
 
----
+## Rapports et filets de sécurité
 
-## Référence des commandes
+Chaque exécution réelle enregistre `exif_resync_report.csv` : anciennes
+valeurs, nouvelles valeurs, provenance de chaque horodatage (`filename`,
+match IA, match hash ou plan), et correction de dérive éventuelle. Gardez ces
+fichiers : `--undo` en a besoin.
+
+`--dry-run` ne touche à aucun fichier et marche même avant l'installation
+d'ExifTool. `--timeline` produit une petite page HTML autonome montrant chaque
+album, chaque photo, son heure attribuée et d'où elle vient.
+
+## Toutes les options
 
 ```
 python exif_resync.py [-d DOSSIER] [-c CONFIG] [-r REFERENCE]
-                      [--dry-run] [--year ANNEE] [--report CHEMIN]
-                      [--undo RAPPORT_CSV]
+                      [--matcher {auto,resnet,hash,off}] [--sync-clocks]
+                      [--dry-run] [--timeline] [--year ANNEE] [--report CHEMIN]
+                      [--undo RAPPORT_CSV] [--check-config] [--verbose]
 ```
 
-| Option | Description |
+| Option | Effet |
 |---|---|
-| `-d, --directory` | Dossier contenant les sous-dossiers datés (défaut : courant). |
-| `-c, --config` | Chemin du fichier JSON de configuration (défaut : `config_planning.json`). |
-| `-r, --reference` | Dossier de vos photos de référence correctement datées (active la reconnaissance IA). |
-| `--dry-run` | Prévisualise tous les changements calculés sans rien écrire. |
-| `--year ANNEE` | Remplace l'année utilisée pour toutes les dates reconstruites. |
-| `--report CHEMIN` | Chemin personnalisé pour le rapport CSV de modifications. |
-| `--undo RAPPORT_CSV` | Restaure les valeurs EXIF d'origine enregistrées dans le rapport indiqué. |
+| `-d, --directory` | dossier contenant les albums datés (défaut : ici) |
+| `-c, --config` | chemin du JSON de configuration (défaut : `config_planning.json`) |
+| `-r, --reference` | vos photos correctement datées, active la comparaison |
+| `--matcher` | `auto`, `resnet`, `hash` ou `off` |
+| `--sync-clocks` | applique la dérive d'horloge détectée à tout l'album |
+| `--dry-run` | prévisualise sans rien écrire |
+| `--timeline` | génère `timeline.html` |
+| `--year` | remplace l'année de toutes les dates reconstruites |
+| `--report` | chemin personnalisé pour le rapport CSV |
+| `--undo` | restaure les originaux depuis un rapport précédent |
+| `--check-config` | valide la config, affiche le planning résolu, puis quitte |
+| `--verbose` | détails photo par photo |
 
----
+## En cas de problème
 
-## Dépannage
+**« ExifTool not found »** : installez-le (voir plus haut). Sous Windows, le
+plus simple reste de poser `exiftool.exe` à côté du script.
 
-**`ERROR: ExifTool not found`**
-Installez ExifTool (voir Prérequis). Sous Windows, vous pouvez déposer
-`exiftool.exe` à côté de `exif_resync.py`.
+**Tout a été ignoré** : vos noms de dossiers doivent contenir un motif
+`JJ-MM` (ou `J-M`) reconnaissable. Un dossier comme `divers` est ignoré,
+c'est voulu.
 
-**Toutes mes photos ont été ignorées**
-Les noms de dossiers doivent contenir un motif `JJ-MM` (ou `J-M`)
-reconnaissable, ex. `05-06 Kayak`. Les dossiers sans date sont ignorés.
+**Mauvaise année partout** : définissez `year` (ou `annee`) dans la config,
+ou passez `--year`.
 
-**Tous les horodatages utilisent la mauvaise année**
-Définissez `"year"` (ou `"annee"`) dans votre config, ou passez `--year 2025`.
+**Une correspondance visuelle attendue n'a pas eu lieu** : il faut passer deux
+barres, une forte similarité *et* le même jour que l'album. Vérifiez d'abord
+la date EXIF de la photo de référence elle-même ; si elle est fausse, la garde
+fait bien son travail en refusant.
 
-**Le fichier de config semble ignoré**
-Assurez-vous qu'il s'agit de JSON valide utilisant soit les clés anglaises
-(`year`, `default_interval_sec`, `schedule`), soit les clés françaises
-(`annee`, `intervalle_defaut_sec`, `planning`). L'outil affiche un avertissement
-lorsque le fichier de config est introuvable ou illisible.
+**Seuls .jpg/.jpeg/.png sont traités.** Les RAW restent intacts, et les
+vidéos sont hors périmètre pour l'instant.
 
-**Une correspondance visuelle a été rejetée bien que les photos soient
-identiques**
-La correspondance doit passer les deux vérifications : similarité cosinus
-≥ 0,85 et date de prise de vue à ±1 jour de la date reconstruite de l'album.
-Vérifiez que le `DateTimeOriginal` propre à la photo de référence est correct.
+## Contribuer
 
----
-
-## FAQ
-
-**Est-ce sûr ? Cela va-t-il détruire mes fichiers ?**
-L'outil ne réécrit que des champs de métadonnées EXIF (`AllDates`,
-`ImageDescription`) et ne touche jamais aux pixels de l'image. Utilisez
-`--dry-run` d'abord, et conservez le rapport CSV — `--undo` restaure
-exactement les valeurs précédentes, y compris « aucune valeur ».
-
-**Renomme-t-il ou déplace-t-il des fichiers ?**
-Non. Les noms et emplacements de fichiers ne changent jamais.
-
-**Quels formats sont pris en charge ?**
-`.jpg`, `.jpeg` et `.png`. Les formats RAW (CR2, NEF, ARW…) ne sont pas
-analysés mais restent intacts.
-
-**Puis-je l'utiliser sur des vidéos ?**
-Non. Seuls `.jpg` / `.jpeg` / `.png` sont traités.
+Les retours de bugs et les pull requests sont bienvenus. Il y a une suite de
+tests (`pip install pytest && python -m pytest tests/`) et la CI lance ruff
+ainsi que les tests sous Linux et Windows ; joignez donc un test quand vous
+corrigez ou ajoutez quelque chose. Jetez un œil à `explain.md` pour comprendre
+les entrailles avant de vous lancer.
 
 ## Licence
 
-[MIT](LICENSE)
+MIT, voir [LICENSE](LICENSE).

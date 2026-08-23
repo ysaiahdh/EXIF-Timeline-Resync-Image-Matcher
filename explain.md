@@ -1,9 +1,9 @@
 # How EXIF Timeline Resync Works
 
-This document explains the internal logic of `exif_resync.py`: how capture
-times are reconstructed, how the optional AI matching decides that two photos
-show the same moment, and how the change report / undo system guarantees
-reversibility.
+This document explains what happens inside `exif_resync.py`: how capture
+times are reconstructed, how each time source wins or loses against the
+others, how the two matching engines decide that two photos show the same
+moment, and how the report / undo system keeps everything reversible.
 
 ---
 
@@ -13,13 +13,13 @@ reversibility.
 photos/
 ├── 01-05 Parc aquatique/          ① folder discovery
 │   ├── resume.txt                 ② description extraction
-│   ├── IMG_001.jpg ───────────┐
-│   └── IMG_002.jpg            │   ③ start-time resolution
-├── 02-05 Safari 14h30/        │   ④ sequential incrementing
-│   └── ...                    │   ⑤ optional AI matching
-└── ...                        │   ⑥ exiftool write
-                                ▼
-                     exif_resync_report.csv  ⇄  --undo
+│   ├── IMG_20260501_091533.jpg ─┐ ③ per-photo time resolution:
+│   ├── IMG_002.jpg              │    filename date > visual match > plan
+│   └── IMG_003.jpg              │ ④ clock-drift analysis (--sync-clocks)
+├── 02-05 Safari 14h30/          │ ⑤ exiftool write
+│   └── ...                      │ ⑥ duplicates detection (matching runs)
+└── ...                          ▼
+        exif_resync_report.csv ⇄ --undo      timeline.html      duplicates_report.csv
 ```
 
 ---
@@ -35,87 +35,104 @@ pattern matching:
 ```
 
 - `(\d{1,2})-(\d{1,2})` → day and month (`01-05`, but also `1-5`)
-- optional `(\d{1,2})h(\d{2})` → hour embedded in the name (`14h30`); when it
-  is not adjacent to the date (`02-05 Safari 14h30`), a second search finds
-  the first `XhMM` token anywhere in the name
-- the look-arounds `(?<![\d-])` / `(?!\d)` prevent false positives inside
-  longer numbers such as ISO dates (`2026-05-01`) or phone numbers.
+- optional `(\d{1,2})h(\d{2})` → hour embedded in the name; when it is not
+  adjacent to the date, a second regex finds the first `XhMM` token anywhere
+  in the name (`02-05 Safari 14h30`)
+- the look-arounds `(?<![\d-])` / `(?!\d)` reject matches inside longer
+  numbers, so ISO-style names like `2026-05-01` are ignored instead of being
+  misread
 
-Day must be within 1–31 and month within 1–12 (and any parsed hour within
-0–23), otherwise the folder is ignored. Folders without any match are
-silently skipped.
+Day must be within 1–31 and month within 1–12 (hour within 0–23), otherwise
+the folder is skipped. Within an album, images (`*.jpg`, `.jpeg`, `.png`,
+case-insensitive) are processed in alphabetical order. The first `.txt` file
+found becomes the `ImageDescription` written into every photo of that album.
 
-Within each album, images (`*.jpg`, `*.jpeg`, `.png`, case-insensitive) are
-processed in **alphabetical order** (also case-insensitive). If a `.txt` file
-exists in the album, its full text becomes the value written to
-`ImageDescription` for every photo of that album.
+## 2. Album start-time resolution
 
----
+Rules are evaluated top-down; first hit wins:
 
-## 2. Start-time resolution
-
-For each album, one start time is chosen by evaluating rules top-down; the
-first hit wins:
-
-| Priority | Rule | Start time | Interval between photos |
+| Priority | Rule | Start | Step between photos |
 |---|---|---|---|
-| 1 | `"boom"` in folder name, or `soiree`/`veillee` in the description | 20:30 | 90 s |
-| 2 | `"bis"`, `"animaux"` or `"apres-midi"` in folder name | 15:00 | 120 s |
-| 3 | Day present in `schedule` (a.k.a. `planning`) config key | configured `HH:MM` | 210 s |
-| 4 | Hour parsed from folder name (`14h30`) | that hour | `default_interval_sec` |
-| 5 | Nothing matched | 12:00 | `default_interval_sec` |
+| 1 | `boom` in folder name, or `soiree`/`veillee` in the text | 20:30 | 90 s |
+| 2 | `bis`, `animaux`, `apres-midi` in folder name | 15:00 | 120 s |
+| 3 | day present in `schedule` (a.k.a. `planning`) | configured `HH:MM` | 210 s |
+| 4 | hour parsed from folder name | that hour | `default_interval_sec` |
+| 5 | nothing matched | 12:00 | `default_interval_sec` |
 
-The year always comes from (in priority order): `--year` CLI flag →
-`year`/`annee` config key → current calendar year (with a warning).
+The year comes from `--year`, else the config's `year`/`annee`, else the
+current year (with a warning).
 
----
+Planned times are then assigned sequentially: photo *n* receives
+`start + n × step`. This guarantees strictly increasing timestamps even when
+every photo would otherwise share one second.
 
-## 3. Sequential incrementing
+## 3. Per-photo time resolution
 
-Web albums are usually uploaded in chronological order, so photo *n* receives:
+Each photo's final timestamp is chosen by priority:
 
-```
-start_time + n × interval
-```
+1. **Filename date** — `parse_filename_date` looks for a full date+time in
+   the file name (`IMG_20260501_143022.jpg`, WhatsApp exports,
+   `2026-05-01 14.30.22`, …) via:
 
-This guarantees strictly increasing, duplicate-free timestamps inside each
-album even though all photos would otherwise share the same second.
+   ```regex
+   (?<!\d)(\d{4})[-_.T ]?(\d{2})[-_.T ]?(\d{2})[-_.T ]?
+   (\d{2})[.:T]?(\d{2})(?:[.:T]?(\d{2}))?(?!\d)
+   ```
 
----
+   All components are range-checked through `datetime()`. A camera-stamped
+   filename is treated as ground truth and overrides everything below.
+   Reported as source `filename`.
 
-## 4. Optional AI matching (`-r/--reference`)
+2. **Visual match** — see section 4. Source `resnet` or `hash`.
 
-Purpose: if you took your own photos during the same events (with a phone or
-camera, so their EXIF dates are still correct), the tool can transfer those
-exact timestamps to the downloaded copies.
+3. **Plan** — the sequential time from section 2. Source `plan`.
 
-**Embedding** — a ResNet-18 pre-trained on ImageNet has its classification
-head removed; the remaining network maps every image to a 512-dimension
-feature vector (L2-normalized). Images looking alike end up with close
-vectors regardless of resolution or compression.
+## 4. Matching engines
 
-**Matching decision** — for each download *D* and reference *R*:
+Both engines expose the same small interface: embed photos into "vectors",
+compare vectors with a similarity in `[0..1]`, and accept a reference only
+above the engine's threshold *and* within ±1 day of the album's date. The day
+guard prevents classic false positives (same pool photographed years apart).
 
-1. Compute cosine similarity `cos(v_D, v_R)` against every reference;
-   keep the best pair `(R*, score)`.
-2. Accept only if **both** guards pass:
-   - `score ≥ 0.85`
-   - `date(R*)` within **±1 day** of the album's reconstructed date
-3. On acceptance, *D*'s timestamp becomes exactly `datetime(R*)`
-   (to the second); the sequential counter then continues from there.
+### ResNetMatcher (`--matcher resnet`)
 
-The double check matters: high visual similarity alone can link photos taken
-years apart (same pool, same classroom…). The day guard anchors matches to
-your declared timeline.
+ResNet-18 pre-trained on ImageNet, classification head removed: every image
+becomes a 512-d L2-normalized feature vector; similarity is the dot product
+(cosine). Acceptance threshold **0.85**. Inference is batched (16 images),
+runs on CUDA, Apple MPS or CPU depending on availability. Weights (~45 MB)
+are downloaded once. Vectors of your reference gallery are cached in
+`.exif_resync_cache.npz` next to the references (invalidated automatically
+when a file changes), so subsequent runs skip re-embedding.
 
-Costs: first run downloads the ResNet-18 weights (~45 MB). Inference runs on
-CPU at roughly 5–10 images/s.
+### HashMatcher (`--matcher hash`)
 
----
+Perceptual hash (pHash, via Pillow + ImageHash): similarity is
+`1 - hamming_distance / 64`. Threshold **0.90** (≤ ~6 flipped bits). Much
+weaker than the network — it detects near-identical images, not "same scene"
+— but installs in seconds and runs anywhere.
 
-## 5. Writing metadata
+`--matcher auto` picks ResNet when torch is importable, otherwise falls back
+to hashing, otherwise matching is disabled with a notice.
 
-Each accepted photo is updated through ExifTool:
+### Duplicate detection
+
+Whenever matching runs, every embedded download is also compared against the
+other albums. Cross-album pairs with similarity ≥ **0.95** land in
+`duplicates_report.csv` — a free by-product that catches photos uploaded to
+several blog posts.
+
+## 5. Clock-drift analysis
+
+For each album the tool compares existing EXIF timestamps against the planned
+sequential ones. Every photo carrying a parseable old `DateTimeOriginal`
+contributes one offset sample. When at least two samples exist, their median
+is computed; if its magnitude reaches 60 seconds the drift is reported in the
+run summary and in the CSV (`drift_applied_sec`). Nothing is modified unless
+`--sync-clocks` is passed, in which case every non-filename-sourced target is
+shifted by the median offset. Filename-derived timestamps stay untouched:
+they are absolute references, not album-relative ones.
+
+## 6. Writing metadata
 
 ```
 exiftool -AllDates="2026:05:01 09:03:00" \
@@ -123,47 +140,37 @@ exiftool -AllDates="2026:05:01 09:03:00" \
          -overwrite_original IMG_001.jpg
 ```
 
-- `-AllDates=` sets `DateTimeOriginal`, `CreateDate` and `ModifyDate` together.
-- `-overwrite_original` avoids leaving `_original` backup copies next to your
-  photos (the CSV report is the safety net instead).
+`-AllDates=` sets `DateTimeOriginal`, `CreateDate` and `ModifyDate`
+together. Exit codes are checked; failures are listed at the end and set the
+process exit code to 1.
 
-ExifTool exit codes are checked; failures are listed at the end of the run
-and reflected in the process exit code.
+Before writing, previous values are read with `-s3 -f` so they can go into
+the report.
 
----
+## 7. Report & undo
 
-## 6. Change report & undo
+`exif_resync_report.csv` stores, per photo: path, the four previous values
+(`-` = absent), the new timestamp and description, the match score, the time
+source, and any applied drift. `--undo report.csv` replays the inverse per
+row: known old values are restored verbatim, `-` clears the tag explicitly.
+Because rows use absolute paths captured at run time, don't move photos
+between a run and its undo.
 
-Before rewriting a photo, the tool reads its previous values:
+## 8. Timeline HTML
 
-```
-exiftool -DateTimeOriginal -CreateDate -ModifyDate \
-         -ImageDescription -s3 -f IMG_001.jpg
-```
-
-and stores them alongside the new values in
-`<directory>/exif_resync_report.csv`. Missing previous values are recorded
-as `-`.
-
-`--undo report.csv` then replays the inverse operation per row:
-
-- known old values → restored verbatim,
-- `-` → the tag is explicitly **cleared** (restoring "no metadata").
-
-Because restoration uses absolute paths recorded at run time, keep the report
-next to your library and avoid moving photos between a run and its undo.
-
----
+`--timeline` renders `timeline.html` from the same in-memory rows: one card
+per album (folder name, start rule), one row per photo with assigned time, a
+colored source badge (`FILE` / `AI` / `HASH` / `PLAN`), similarity percentage
+and applied drift. Everything is escaped; the file has no external
+dependencies and works offline.
 
 ## Known limitations
 
-- Only direct sub-folders are scanned (no recursion).
-- Alphabetical order is assumed to reflect chronological order.
-- Keywords (`boom`, `soiree`, …) are hard-coded and accent-free.
-- PNG files get XMP-based dates rather than true EXIF records.
-- One report file per run: running twice overwrites the default report
-  unless `--report` is used.
+- Only direct sub-folders are scanned (no recursion yet)
+- Alphabetical order is assumed to reflect chronological order
+- Keywords are hard-coded and accent-free
+- One default report name per run; use `--report` for parallel sessions
+- PNG files receive XMP-based dates rather than true EXIF records
 
-Ideas welcome — recursive scan, configurable keywords, filename-date
-detection (`IMG_20260501_143022.jpg`), GPU acceleration are natural next
-steps.
+Natural next steps: recursive scan, configurable keywords, GPU batching
+tuning, PyPI publication.
