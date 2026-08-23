@@ -20,3 +20,6 @@ config_planning.json
 # ExifTool binaries placed by Windows users
 exiftool.exe
 exiftool(-k).exe
+
+# Unrelated local clone
+Darkly/
