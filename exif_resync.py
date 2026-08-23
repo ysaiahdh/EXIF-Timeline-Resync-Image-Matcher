@@ -7,11 +7,13 @@ Restores EXIF timestamps from folder names, schedules, and visual matching.
 """
 
 import argparse
+import csv
 import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from PIL import Image
 
@@ -22,6 +24,23 @@ try:
     HAS_VISION = True
 except ImportError:
     HAS_VISION = False
+
+
+MATCH_THRESHOLD = 0.85
+
+REPORT_FIELDS = [
+    "path",
+    "old_datetimeoriginal",
+    "old_createdate",
+    "old_modifydate",
+    "old_imagedescription",
+    "new_datetime",
+    "new_imagedescription",
+    "match_score",
+]
+
+FOLDER_DATE_RE = re.compile(r"(?<![\d-])(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2})h(\d{2}))?(?!\d)")
+FOLDER_HOUR_RE = re.compile(r"(?<![\dh])(\d{1,2})h(\d{2})(?!\d)")
 
 
 # --- Feature Extractor ---
@@ -103,25 +122,63 @@ def find_exiftool():
 
 
 def load_config(config_path):
+    defaults = {"year": None, "default_interval_sec": 180, "schedule": {}}
+
     if not os.path.exists(config_path):
-        return 2026, 180, {}
-    with open(config_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("year", 2026), data.get("default_interval_sec", 180), data.get("schedule", {})
+        print(f"WARNING: config file '{config_path}' not found. Using default settings.")
+        return defaults
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as exc:
+        sys.exit(f"ERROR: '{config_path}' is not valid JSON: {exc}")
+    except OSError as exc:
+        sys.exit(f"ERROR: cannot read '{config_path}': {exc}")
+
+    year = data.get("year", data.get("annee"))
+    interval = data.get("default_interval_sec", data.get("intervalle_defaut_sec", 180))
+    schedule = data.get("schedule", data.get("planning", {}))
+
+    if not isinstance(interval, (int, float)) or interval < 0:
+        sys.exit(f"ERROR: 'default_interval_sec' must be a positive number, got {interval!r}.")
+    if not isinstance(schedule, dict):
+        sys.exit("ERROR: 'schedule' must be an object mapping \"DD-MM\" to \"HH:MM\".")
+
+    return {
+        "year": int(year) if year else None,
+        "default_interval_sec": int(interval),
+        "schedule": schedule,
+    }
 
 
 def parse_folder_date(folder_name):
-    match = re.search(r'(\d{2})-(\d{2})(?:\s+(\d{1,2})h(\d{2}))?', folder_name)
-    if match:
-        day, month, hour, minute = match.groups()
-        day_key = f"{day}-{month}"
-        blog_hour = int(hour) if hour else 12
-        blog_min = int(minute) if minute else 0
-        return day_key, int(day), int(month), blog_hour, blog_min
-    return None, None, None, None, None
+    match = FOLDER_DATE_RE.search(folder_name)
+    if not match:
+        return None
+
+    day, month, hour, minute = match.groups()
+    day_i, month_i = int(day), int(month)
+
+    if not (1 <= day_i <= 31 and 1 <= month_i <= 12):
+        return None
+
+    h_blog = int(hour) if hour is not None else None
+    m_blog = int(minute) if minute is not None else None
+
+    if h_blog is None:
+        hour_match = FOLDER_HOUR_RE.search(folder_name)
+        if hour_match:
+            h_blog, m_blog = int(hour_match.group(1)), int(hour_match.group(2))
+
+    if h_blog is None or h_blog > 23 or m_blog > 59:
+        h_blog, m_blog = 12, 0
+
+    return f"{day_i:02d}-{month_i:02d}", day_i, month_i, h_blog, m_blog
 
 
-def determine_schedule(day_key, folder_name, description, h_blog, m_blog, schedule):
+def determine_schedule(day_key, folder_name, description, h_blog, m_blog,
+                       schedule, default_interval):
     folder_lower = folder_name.lower()
     desc_lower = description.lower()
 
@@ -132,16 +189,68 @@ def determine_schedule(day_key, folder_name, description, h_blog, m_blog, schedu
     if day_key in schedule:
         h_str, m_str = schedule[day_key].split(":")
         return int(h_str), int(m_str), 210
-    return h_blog, m_blog, 180
+    return h_blog, m_blog, default_interval
 
 
-def process_photos(root_dir, config_path, ref_dir=None):
-    exiftool_bin = find_exiftool()
-    if not exiftool_bin:
-        print("ERROR: ExifTool not found on your system.")
-        return
+def read_current_tags(exiftool_bin, img_path):
+    cmd = [
+        exiftool_bin,
+        "-DateTimeOriginal",
+        "-CreateDate",
+        "-ModifyDate",
+        "-ImageDescription",
+        "-s3",
+        "-f",
+        img_path,
+    ]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if res.returncode != 0:
+        return None
 
-    year, default_interval, schedule = load_config(config_path)
+    values = res.stdout.split("\n")
+    while len(values) < 4:
+        values.append("")
+    return values[:4]
+
+
+def apply_tags(exiftool_bin, img_path, date_str, description):
+    cmd = [
+        exiftool_bin,
+        f"-AllDates={date_str}",
+        f"-ImageDescription={description}",
+        "-overwrite_original",
+        img_path,
+    ]
+    res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    return res.returncode == 0, res.stderr.strip()
+
+
+def process_photos(root_dir, config_path, ref_dir=None, dry_run=False,
+                   year_override=None, report_path=None):
+    exiftool_bin = None
+    if not dry_run:
+        exiftool_bin = find_exiftool()
+        if not exiftool_bin:
+            sys.exit(
+                "ERROR: ExifTool not found on your system.\n"
+                "Install it first:\n"
+                "  - Windows: download from https://exiftool.org and place exiftool.exe "
+                "in the project root or your PATH\n"
+                "  - Linux:   sudo apt install libimage-exiftool-perl\n"
+                "  - macOS:   brew install exiftool\n"
+                "Or re-run with --dry-run to preview changes without writing."
+            )
+
+    config = load_config(config_path)
+
+    year = year_override or config["year"]
+    if year is None:
+        year = datetime.now().year
+        print(f"WARNING: no year configured. Defaulting to {year} "
+              f"(use the 'year' key in {config_path} or --year to change this).")
+
+    default_interval = config["default_interval_sec"]
+    schedule = config["schedule"]
 
     extractor = None
     ref_db = []
@@ -150,35 +259,54 @@ def process_photos(root_dir, config_path, ref_dir=None):
             print("PyTorch/Torchvision not found. Running without image matching.")
             print("To enable AI matching: pip install -r requirements.txt")
         else:
+            exiftool_for_refs = exiftool_bin or find_exiftool()
+            if not exiftool_for_refs:
+                sys.exit("ERROR: ExifTool is required to read dates from your reference "
+                         "photos (--reference). Install it or drop --dry-run.")
             extractor = ImageFeatureExtractor()
-            ref_db = load_reference_gallery(ref_dir, extractor, exiftool_bin)
+            ref_db = load_reference_gallery(ref_dir, extractor, exiftool_for_refs)
+
+    if not os.path.isdir(root_dir):
+        sys.exit(f"ERROR: directory '{root_dir}' does not exist.")
 
     folders = [d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))]
-    folders.sort()
+    folders.sort(key=str.lower)
 
     total_images = 0
+    failures = []
+    report_rows = []
 
     for folder in folders:
         path_folder = os.path.join(root_dir, folder)
-        day_key, day, month, h_blog, m_blog = parse_folder_date(folder)
+        parsed = parse_folder_date(folder)
 
-        if not day_key:
+        if not parsed:
             continue
 
+        day_key, day, month, h_blog, m_blog = parsed
+
         description = ""
-        txt_files = [f for f in os.listdir(path_folder) if f.endswith(".txt")]
+        txt_files = [f for f in os.listdir(path_folder) if f.lower().endswith(".txt")]
         if txt_files:
             try:
-                with open(os.path.join(path_folder, txt_files[0]), "r", encoding="utf-8", errors="ignore") as f:
+                with open(os.path.join(path_folder, txt_files[0]), "r",
+                          encoding="utf-8", errors="ignore") as f:
                     description = f.read().strip()
             except Exception:
                 pass
 
-        h_start, m_start, step = determine_schedule(day_key, folder, description, h_blog, m_blog, schedule)
-        base_dt = datetime(year, month, day, h_start, m_start)
+        h_start, m_start, step = determine_schedule(day_key, folder, description,
+                                                    h_blog, m_blog, schedule,
+                                                    default_interval)
+        try:
+            base_dt = datetime(year, month, day, h_start, m_start)
+        except ValueError:
+            print(f"\nFolder: {folder}\n  Skipped: invalid date ({day}/{month}/{year}).")
+            continue
 
-        images = [f for f in os.listdir(path_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        images.sort()
+        images = [f for f in os.listdir(path_folder)
+                  if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        images.sort(key=str.lower)
 
         if not images:
             continue
@@ -189,6 +317,7 @@ def process_photos(root_dir, config_path, ref_dir=None):
         for img in images:
             img_path = os.path.join(path_folder, img)
             target_dt = current_dt
+            match_score = ""
 
             if extractor and ref_db:
                 vector_img = extractor.get_vector(img_path)
@@ -202,35 +331,169 @@ def process_photos(root_dir, config_path, ref_dir=None):
                             best_score = sim
                             best_match = ref
 
-                    if best_score >= 0.85 and best_match:
+                    if best_score >= MATCH_THRESHOLD and best_match:
                         if abs((best_match["datetime"].date() - base_dt.date()).days) <= 1:
                             target_dt = best_match["datetime"]
-                            print(f"  Visual match ({best_score*100:.1f}%) -> {target_dt.strftime('%H:%M:%S')}")
+                            match_score = f"{best_score:.4f}"
+                            print(f"  Visual match ({best_score*100:.1f}%) "
+                                  f"-> {target_dt.strftime('%H:%M:%S')}")
 
             date_str = target_dt.strftime("%Y:%m:%d %H:%M:%S")
 
-            cmd = [
-                exiftool_bin,
-                f"-AllDates={date_str}",
-                f"-ImageDescription={description}",
-                "-overwrite_original",
-                img_path
-            ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if dry_run:
+                print(f"  [DRY-RUN] {img}: {date_str}")
+            else:
+                old_tags = read_current_tags(exiftool_bin, img_path)
+                ok, err = apply_tags(exiftool_bin, img_path, date_str, description)
+                if ok:
+                    report_rows.append({
+                        "path": os.path.abspath(img_path),
+                        "old_datetimeoriginal": old_tags[0] if old_tags else "",
+                        "old_createdate": old_tags[1] if old_tags else "",
+                        "old_modifydate": old_tags[2] if old_tags else "",
+                        "old_imagedescription": old_tags[3] if old_tags else "",
+                        "new_datetime": date_str,
+                        "new_imagedescription": description,
+                        "match_score": match_score,
+                    })
+                else:
+                    failures.append((img_path, err or "unknown error"))
 
             current_dt += timedelta(seconds=step)
 
         total_images += len(images)
         print(f"  {len(images)} photos processed.")
 
-    print(f"\nDone. {total_images} photos updated total.")
+    summary = f"\nDone. {total_images} photos {'previewed' if dry_run else 'updated'} total."
+
+    if failures:
+        summary += f"\n{len(failures)} photo(s) FAILED:"
+        for path, err in failures[:20]:
+            summary += f"\n  - {path}: {err}"
+        if len(failures) > 20:
+            summary += f"\n  ... and {len(failures) - 20} more."
+        print(summary)
+
+        if report_rows and not dry_run:
+            write_report(report_rows, report_path or os.path.join(root_dir, "exif_resync_report.csv"))
+
+        return 1
+
+    print(summary)
+
+    if not dry_run and report_rows:
+        final_report = report_path or os.path.join(root_dir, "exif_resync_report.csv")
+        write_report(report_rows, final_report)
+
+    return 0
+
+
+def write_report(rows, report_path):
+    try:
+        with open(report_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=REPORT_FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"Change report saved to: {report_path}")
+        print("(Keep this file: it can be used with --undo to restore original values.)")
+    except OSError as exc:
+        print(f"WARNING: could not write change report '{report_path}': {exc}")
+
+
+def undo_from_report(report_path, exiftool_bin=None):
+    if exiftool_bin is None:
+        exiftool_bin = find_exiftool()
+        if not exiftool_bin:
+            sys.exit("ERROR: ExifTool not found on your system.")
+
+    if not os.path.exists(report_path):
+        sys.exit(f"ERROR: report file '{report_path}' not found.")
+
+    try:
+        with open(report_path, "r", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    except OSError as exc:
+        sys.exit(f"ERROR: cannot read '{report_path}': {exc}")
+
+    if not rows:
+        print("Report is empty. Nothing to undo.")
+        return 0
+
+    restored = 0
+    failures = []
+
+    for row in rows:
+        img_path = row["path"]
+        if not os.path.exists(img_path):
+            failures.append((img_path, "file not found"))
+            continue
+
+        cmd = [exiftool_bin, "-overwrite_original"]
+        for tag, column in (
+            ("DateTimeOriginal", "old_datetimeoriginal"),
+            ("CreateDate", "old_createdate"),
+            ("ModifyDate", "old_modifydate"),
+            ("ImageDescription", "old_imagedescription"),
+        ):
+            value = (row.get(column) or "").strip()
+            if value in ("", "-"):
+                cmd.append(f"-{tag}=")
+            else:
+                cmd.append(f"-{tag}={value}")
+        cmd.append(img_path)
+
+        res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if res.returncode == 0:
+            restored += 1
+        else:
+            failures.append((img_path, res.stderr.strip() or "unknown error"))
+
+        print(f"  Restored: {img_path}" if res.returncode == 0 else f"  FAILED: {img_path}")
+
+    print(f"\nUndo complete. {restored} photo(s) restored.")
+    if failures:
+        print(f"{len(failures)} photo(s) FAILED:")
+        for path, err in failures:
+            print(f"  - {path}: {err}")
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Recalibrate EXIF metadata with image matching.")
-    parser.add_argument("-d", "--directory", default=".", help="Path to folder containing undated photos.")
-    parser.add_argument("-c", "--config", default="config_planning.json", help="Path to JSON config file.")
-    parser.add_argument("-r", "--reference", default=None, help="Path to folder of dated reference photos.")
+    parser = argparse.ArgumentParser(
+        prog="exif_resync",
+        description="Recalibrate EXIF metadata with image matching.",
+        epilog=(
+            "Examples:\n"
+            "  python exif_resync.py -d ./photos\n"
+            "  python exif_resync.py -d ./photos --dry-run\n"
+            "  python exif_resync.py -d ./photos -c my_config.json --year 2025\n"
+            "  python exif_resync.py -d ./photos -r ./my_reference_photos\n"
+            "  python exif_resync.py --undo ./photos/exif_resync_report.csv\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("-d", "--directory", default=".",
+                        help="Path to folder containing undated photos.")
+    parser.add_argument("-c", "--config", default="config_planning.json",
+                        help="Path to JSON config file.")
+    parser.add_argument("-r", "--reference", default=None,
+                        help="Path to folder of dated reference photos.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Preview changes without writing any EXIF data.")
+    parser.add_argument("--year", type=int, default=None,
+                        help="Override the year used for all reconstructed dates.")
+    parser.add_argument("--report", default=None,
+                        help="Path of the change report CSV (default: "
+                             "<directory>/exif_resync_report.csv).")
+    parser.add_argument("--undo", metavar="REPORT_CSV", default=None,
+                        help="Restore original EXIF values from a previous change report.")
     args = parser.parse_args()
 
-    process_photos(args.directory, args.config, args.reference)
+    if args.undo:
+        sys.exit(undo_from_report(args.undo))
+    else:
+        sys.exit(process_photos(args.directory, args.config, args.reference,
+                                dry_run=args.dry_run, year_override=args.year,
+                                report_path=args.report))

@@ -1,4 +1,8 @@
+# Dependencies required only for the image matching option (-r / --reference)
 # Dépendances requises uniquement pour l'option de matching d'images (-r / --reference)
+#
+# Tip / Astuce : on CPU-only machines you can save disk space with:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
 Pillow
