@@ -196,7 +196,7 @@ python exif_resync.py --undo ./photos/exif_resync_report.csv
 ```
 
 L'annulation restaure exactement les valeurs précédentes, y compris la
-suppression des tags qui n'existaient pas avant.
+suppression des balises qui n'existaient pas avant.
 
 ## ⚙️ Référence de configuration
 
@@ -278,9 +278,10 @@ issus des noms de fichiers ne sont pas touchés.
 
 Chaque exécution réelle enregistre `exif_resync_report.csv` : anciennes
 valeurs, nouvelles valeurs, provenance de chaque horodatage (`filename`,
-match IA, match hash ou plan), et correction de dérive éventuelle. Gardez ces
-fichiers : `--undo` en a besoin. `--undo` accepte aussi `--dry-run`
-(aperçu de ce qui serait restauré) et `--quiet` (résumé seul).
+correspondance IA, correspondance par hachage, ou plan), et correction de
+dérive éventuelle. Gardez ces fichiers : `--undo` en a besoin. `--undo`
+accepte aussi `--dry-run` (aperçu de ce qui serait restauré) et `--quiet`
+(résumé seul).
 
 > [!NOTE]
 > `--dry-run` ne touche à aucun fichier et marche même avant l'installation
@@ -292,7 +293,7 @@ la chronologie est écrite à côté du rapport plutôt que dans le dossier phot
 
 > [!WARNING]
 > `--sync-mtime` met aussi à jour la date de modification du fichier — et
-> contrairement aux tags EXIF, celle-ci n'est **pas** annulée par `--undo`.
+> contrairement aux balises EXIF, celle-ci n'est **pas** annulée par `--undo`.
 
 ## 🧰 Toutes les options
 
