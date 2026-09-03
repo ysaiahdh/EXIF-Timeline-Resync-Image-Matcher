@@ -34,8 +34,14 @@ class TestParseFolderDate:
 class TestParseFilenameDate:
     def test_img_pattern(self):
         dt = parse_filename_date("IMG_20260501_143022.jpg")
-        assert (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second) == \
-            (2026, 5, 1, 14, 30, 22)
+        assert (dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second) == (
+            2026,
+            5,
+            1,
+            14,
+            30,
+            22,
+        )
 
     def test_whatsapp_style(self):
         dt = parse_filename_date("WhatsApp-20260502-091530.mp4.jpg")
@@ -66,25 +72,31 @@ class TestLoadConfig:
 
     def test_english_keys(self, tmp_path):
         path = tmp_path / "config.json"
-        path.write_text(json.dumps({
-            "year": 2029,
-            "default_interval_sec": 45,
-            "schedule": {"01-05": "08:00"},
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "year": 2029,
+                    "default_interval_sec": 45,
+                    "schedule": {"01-05": "08:00"},
+                }
+            )
+        )
         config = load_config(str(path))
-        assert config == {"year": 2029, "default_interval_sec": 45,
-                          "schedule": {"01-05": "08:00"}}
+        assert config == {"year": 2029, "default_interval_sec": 45, "schedule": {"01-05": "08:00"}}
 
     def test_french_keys(self, tmp_path):
         path = tmp_path / "config.json"
-        path.write_text(json.dumps({
-            "annee": 2027,
-            "intervalle_defaut_sec": 60,
-            "planning": {"01-05": "08:00"},
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "annee": 2027,
+                    "intervalle_defaut_sec": 60,
+                    "planning": {"01-05": "08:00"},
+                }
+            )
+        )
         config = load_config(str(path))
-        assert config == {"year": 2027, "default_interval_sec": 60,
-                          "schedule": {"01-05": "08:00"}}
+        assert config == {"year": 2027, "default_interval_sec": 60, "schedule": {"01-05": "08:00"}}
 
     def test_invalid_json_exits(self, tmp_path):
         path = tmp_path / "bad.json"
@@ -97,3 +109,53 @@ class TestLoadConfig:
         path.write_text(json.dumps({"default_interval_sec": -5}))
         with pytest.raises(SystemExit):
             load_config(str(path))
+
+    def test_zero_interval_exits(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"default_interval_sec": 0}))
+        with pytest.raises(SystemExit):
+            load_config(str(path))
+
+    def test_schedule_keys_normalized(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"year": 2026, "schedule": {"1-5": "9:30"}}))
+        config = load_config(str(path))
+        assert config["schedule"] == {"01-05": "09:30"}
+
+    def test_invalid_schedule_key_exits(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"schedule": {"tomorrow": "09:00"}}))
+        with pytest.raises(SystemExit):
+            load_config(str(path))
+
+    def test_invalid_schedule_value_exits(self, tmp_path):
+        for bad in ("9h00", "09-00", "25:00", "09:60", 900, "09:00:00"):
+            path = tmp_path / "config.json"
+            path.write_text(json.dumps({"schedule": {"01-05": bad}}))
+            with pytest.raises(SystemExit):
+                load_config(str(path))
+
+    def test_non_dict_schedule_exits(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"schedule": ["01-05"]}))
+        with pytest.raises(SystemExit):
+            load_config(str(path))
+
+    def test_mixed_language_keys_warn(self, tmp_path, capsys):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"year": 2026, "planning": {"01-05": "09:00"}}))
+        config = load_config(str(path))
+        assert config["schedule"] == {"01-05": "09:00"}
+        assert "mixes English and French" in capsys.readouterr().out
+
+    def test_year_string_coerced(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"year": "2027"}))
+        assert load_config(str(path))["year"] == 2027
+
+    def test_invalid_year_exits(self, tmp_path):
+        for bad in ("soon", 99, 10000):
+            path = tmp_path / "config.json"
+            path.write_text(json.dumps({"year": bad}))
+            with pytest.raises(SystemExit):
+                load_config(str(path))

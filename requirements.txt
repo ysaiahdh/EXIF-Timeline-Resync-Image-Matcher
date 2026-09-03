@@ -14,7 +14,8 @@
 #     pip install tqdm
 #
 # This file installs everything needed for full AI matching (-r / --reference):
-torch
-torchvision
-Pillow
-numpy
+# (torchvision must stay in sync with torch; pip installs matching latests.)
+torch>=1.13
+torchvision>=0.14
+Pillow>=9
+numpy>=1.22

@@ -1,5 +1,3 @@
-import sys
-
 import pytest
 
 from exif_resync import HashMatcher, build_matcher
@@ -78,4 +76,56 @@ def test_build_matcher_explicit_without_deps_exits(monkeypatch):
 
 def test_no_torch_at_runtime():
     # The tool must be importable and usable without torch installed.
-    assert "torch" not in sys.modules or True  # import guard smoke check
+    import exif_resync
+
+    assert isinstance(exif_resync.HAS_VISION, bool)
+    assert isinstance(exif_resync.HAS_PILLOW, bool)
+    assert exif_resync.build_matcher("off") is None
+
+
+class TestDuplicateOnlyMode:
+    def _two_albums(self, tmp_path):
+        from PIL import Image
+
+        for album in ("01-05 A", "02-05 B"):
+            path = tmp_path / album
+            path.mkdir()
+            Image.new("RGB", (64, 64), (10, 200, 90)).save(path / "same.png")
+        config = tmp_path / "config.json"
+        config.write_text('{"year": 2026}')
+        return config
+
+    def test_duplicates_without_reference(self, tmp_path, monkeypatch):
+        from test_report_undo import FakeExifTool
+
+        import exif_resync
+
+        config = self._two_albums(tmp_path)
+        fake = FakeExifTool()
+        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+
+        rc = exif_resync.process_photos(
+            str(tmp_path), str(config), matcher_mode="hash", duplicates=True
+        )
+        assert rc == 0
+        report = tmp_path / "duplicates_report.csv"
+        assert report.exists()
+        assert "same.png" in report.read_text(encoding="utf-8")
+
+    def test_duplicates_dry_run_writes_nothing(self, tmp_path, monkeypatch):
+        from test_report_undo import FakeExifTool
+
+        import exif_resync
+
+        config = self._two_albums(tmp_path)
+        fake = FakeExifTool()
+        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+
+        rc = exif_resync.process_photos(
+            str(tmp_path), str(config), matcher_mode="hash", duplicates=True, dry_run=True
+        )
+        assert rc == 0
+        assert not (tmp_path / "duplicates_report.csv").exists()
+        assert not (tmp_path / "exif_resync_report.csv").exists()

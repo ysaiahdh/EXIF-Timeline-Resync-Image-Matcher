@@ -1,4 +1,5 @@
 import csv
+import json
 
 import pytest
 
@@ -6,7 +7,7 @@ from exif_resync import REPORT_FIELDS, process_photos, undo_from_report, write_r
 
 
 class FakeExifTool:
-    """Scriptable stand-in recording every write/undo invocation."""
+    """Scriptable stand-in speaking the `exiftool -j` protocol for reads."""
 
     def __init__(self, initial_tags=None):
         self.calls = []
@@ -16,10 +17,18 @@ class FakeExifTool:
     def __call__(self, cmd, capture_output=False, text=False, stdout=None, stderr=None):
         self.calls.append(list(cmd))
 
-        if "-s3" in cmd:
-            path = cmd[-1]
-            tags = self.current.get(path, self.initial_tags)
-            return type("R", (), {"returncode": 0, "stdout": "\n".join(tags), "stderr": ""})()
+        if "-j" in cmd:
+            payload = []
+            for path in (a for a in cmd[1:] if not a.startswith("-")):
+                tags = self.current.get(path, self.initial_tags)
+                obj = {"SourceFile": path}
+                for tag, val in zip(
+                    ("DateTimeOriginal", "CreateDate", "ModifyDate", "ImageDescription"), tags
+                ):
+                    if val not in ("", "-"):
+                        obj[tag] = val
+                payload.append(obj)
+            return type("R", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""})()
 
         if "-overwrite_original" in cmd:
             path = cmd[-1]
@@ -28,8 +37,12 @@ class FakeExifTool:
                 if arg == "-overwrite_original":
                     continue
                 tag, _, value = arg.lstrip("-").partition("=")
-                mapping = {"DateTimeOriginal": 0, "CreateDate": 1,
-                           "ModifyDate": 2, "ImageDescription": 3}
+                mapping = {
+                    "DateTimeOriginal": 0,
+                    "CreateDate": 1,
+                    "ModifyDate": 2,
+                    "ImageDescription": 3,
+                }
                 all_dates = tag == "AllDates"
                 if all_dates:
                     current[0] = current[1] = current[2] = value
@@ -63,9 +76,7 @@ class TestReportAndUndoRoundTrip:
         tmp_path, config_path = photo_tree
         old = ["2020:01:01 00:00:00", "2020:01:01 00:00:00", "-", "hello"]
         fake = FakeExifTool()
-        fake.current = {
-            str(tmp_path / "01-06 Parc" / name): old for name in ("a.jpg", "b.jpg")
-        }
+        fake.current = {str(tmp_path / "01-06 Parc" / name): old for name in ("a.jpg", "b.jpg")}
 
         rc = run_process(tmp_path, config_path, fake, monkeypatch)
         assert rc == 0
@@ -94,8 +105,12 @@ class TestReportAndUndoRoundTrip:
 
         # Simulate a second state so undo has something to roll back.
         for p in fake.current:
-            fake.current[p] = ["1999:09:09 09:09:09", "1999:09:09 09:09:09",
-                               "1999:09:09 09:09:09", "resync wrote this"]
+            fake.current[p] = [
+                "1999:09:09 09:09:09",
+                "1999:09:09 09:09:09",
+                "1999:09:09 09:09:09",
+                "resync wrote this",
+            ]
 
         report = tmp_path / "exif_resync_report.csv"
         rc = undo_from_report(str(report), exiftool_bin="mock-exiftool")
@@ -121,9 +136,13 @@ class TestReportAndUndoRoundTrip:
         with open(report, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=REPORT_FIELDS)
             writer.writeheader()
-            writer.writerow({**{k: "" for k in REPORT_FIELDS},
-                             "path": str(tmp_path / "gone.jpg"),
-                             "old_datetimeoriginal": "2020:01:01 00:00:00"})
+            writer.writerow(
+                {
+                    **{k: "" for k in REPORT_FIELDS},
+                    "path": str(tmp_path / "gone.jpg"),
+                    "old_datetimeoriginal": "2020:01:01 00:00:00",
+                }
+            )
 
         rc = undo_from_report(str(report), exiftool_bin="mock-exiftool")
         assert rc == 1
@@ -139,6 +158,86 @@ class TestReportAndUndoRoundTrip:
         assert not (tmp_path / "exif_resync_report.csv").exists()
         out = capsys.readouterr().out
         assert "DRY-RUN" in out
+
+    def test_multiline_description_survives_roundtrip(self, photo_tree, monkeypatch):
+        import exif_resync
+
+        tmp_path, config_path = photo_tree
+        path = str(tmp_path / "01-06 Parc" / "a.jpg")
+        fake = FakeExifTool()
+        fake.current = {path: ["-", "-", "-", "line one\nline two"]}
+        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+
+        tags = exif_resync.read_current_tags("mock-exiftool", path)
+        assert tags == ["-", "-", "-", "line one\nline two"]
+
+    def test_empty_description_leaves_tag_untouched(self, photo_tree, monkeypatch):
+        tmp_path, config_path = photo_tree
+        old = ["2020:01:01 00:00:00", "2020:01:01 00:00:00", "-", "keep me"]
+        fake = FakeExifTool()
+        fake.current = {
+            str(tmp_path / "01-06 Parc" / name): list(old) for name in ("a.jpg", "b.jpg")
+        }
+
+        rc = run_process(tmp_path, config_path, fake, monkeypatch)
+        assert rc == 0
+
+        # No album .txt exists, so no ImageDescription write may be issued.
+        assert not any(a.startswith("-ImageDescription=") for c in fake.calls for a in c)
+        with open(tmp_path / "exif_resync_report.csv", newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        assert all(r["new_imagedescription"] == "keep me" for r in rows)
+
+    def test_undo_dry_run_writes_nothing(self, photo_tree, monkeypatch, capsys):
+        import exif_resync
+
+        tmp_path, _ = photo_tree
+        fake = FakeExifTool()
+        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+
+        report = tmp_path / "r.csv"
+        with open(report, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=REPORT_FIELDS)
+            writer.writeheader()
+            writer.writerow(
+                {
+                    **{k: "" for k in REPORT_FIELDS},
+                    "path": str(tmp_path / "a.jpg"),
+                    "old_datetimeoriginal": "2020:01:01 00:00:00",
+                }
+            )
+
+        rc = undo_from_report(str(report), dry_run=True)
+        assert rc == 0
+        assert fake.calls == []
+        assert "Would restore" in capsys.readouterr().out
+
+    def test_undo_rejects_malformed_report(self, tmp_path):
+        bad = tmp_path / "bad.csv"
+        bad.write_text("path,new_datetime\n/tmp/a.jpg,2026:01:01 00:00:00\n")
+        with pytest.raises(SystemExit):
+            undo_from_report(str(bad), exiftool_bin="mock-exiftool")
+
+    def test_undo_missing_report_exits_first(self, tmp_path):
+        with pytest.raises(SystemExit, match="not found"):
+            undo_from_report(str(tmp_path / "nope.csv"))
+
+    def test_quiet_suppresses_per_photo_lines(self, photo_tree, monkeypatch, capsys):
+        tmp_path, config_path = photo_tree
+        fake = FakeExifTool()
+        rc = run_process(tmp_path, config_path, fake, monkeypatch, dry_run=True, quiet=True)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Folder:" not in out
+        assert "Done." in out
+
+    def test_sync_mtime_flag_reaches_exiftool(self, photo_tree, monkeypatch):
+        tmp_path, config_path = photo_tree
+        fake = FakeExifTool()
+        rc = run_process(tmp_path, config_path, fake, monkeypatch, sync_mtime=True)
+        assert rc == 0
+        assert any("-FileModifyDate=" in a for c in fake.calls for a in c)
 
 
 class TestClockDrift:
@@ -164,6 +263,20 @@ class TestClockDrift:
         with open(tmp_path / "exif_resync_report.csv", newline="", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
         assert all(row["drift_applied_sec"] == "" for row in rows)
+
+    def test_drift_detected_in_dry_run_when_tool_available(self, photo_tree, monkeypatch, capsys):
+        tmp_path, config_path = photo_tree
+        album = tmp_path / "01-06 Parc"
+        fake = FakeExifTool()
+        fake.current = {
+            str(album / "a.jpg"): ["2026:06:01 10:31:00", "-", "-", "-"],
+            str(album / "b.jpg"): ["2026:06:01 10:32:00", "-", "-", "-"],
+        }
+
+        rc = run_process(tmp_path, config_path, fake, monkeypatch, dry_run=True)
+        assert rc == 0
+        assert "Clock drift detected" in capsys.readouterr().out
+        assert not (tmp_path / "exif_resync_report.csv").exists()
 
     def test_sync_clocks_shifts_album(self, photo_tree, monkeypatch):
         tmp_path, config_path = photo_tree

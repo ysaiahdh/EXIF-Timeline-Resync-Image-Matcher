@@ -4,9 +4,15 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
 
 # Tool artifacts
 exif_resync_report*.csv
+duplicates_report.csv
+timeline.html
+*_timeline.html
+.exif_resync_cache.npz
 
 # OS / editor
 .DS_Store

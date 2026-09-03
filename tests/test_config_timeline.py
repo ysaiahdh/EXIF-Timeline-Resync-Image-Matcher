@@ -6,11 +6,15 @@ from exif_resync import check_config, fmt_delta, parse_folder_date, write_timeli
 class TestCheckConfig:
     def test_valid_config_output(self, tmp_path, capsys):
         config = tmp_path / "config.json"
-        config.write_text(json.dumps({
-            "year": 2027,
-            "default_interval_sec": 90,
-            "schedule": {"01-05": "09:00", "02-05": "08:30"},
-        }))
+        config.write_text(
+            json.dumps(
+                {
+                    "year": 2027,
+                    "default_interval_sec": 90,
+                    "schedule": {"01-05": "09:00", "02-05": "08:30"},
+                }
+            )
+        )
 
         check_config(str(config))
         out = capsys.readouterr().out
@@ -41,15 +45,42 @@ class TestCheckConfig:
         assert "start 08:00" in out
         assert "1 dated folder(s)" in out
 
+    def test_recursive_folder_resolution(self, tmp_path, capsys):
+        config = tmp_path / "config.json"
+        config.write_text(json.dumps({"year": 2026}))
+        nested = tmp_path / "season" / "01-05 Parc"
+        nested.mkdir(parents=True)
+
+        check_config(str(config), str(tmp_path))
+        assert "no dated folder found" in capsys.readouterr().out
+
+        check_config(str(config), str(tmp_path), recursive=True)
+        out = capsys.readouterr().out
+        assert "01-05 Parc" in out
+        assert "1 dated folder(s)" in out
+
 
 class TestTimeline:
     def _rows(self):
         return [
-            {"folder": "01-05 Parc", "rule": "schedule", "file": "IMG_001.jpg",
-             "time": "2026:05:01 09:00:00", "source": "plan", "score": "", "drift": ""},
-            {"folder": "01-05 Parc", "rule": "schedule", "file": "photo_2.jpg",
-             "time": "2026:05:01 14:30:22", "source": "filename", "score": "",
-             "drift": "-7200"},
+            {
+                "folder": "01-05 Parc",
+                "rule": "schedule",
+                "file": "IMG_001.jpg",
+                "time": "2026:05:01 09:00:00",
+                "source": "plan",
+                "score": "",
+                "drift": "",
+            },
+            {
+                "folder": "01-05 Parc",
+                "rule": "schedule",
+                "file": "photo_2.jpg",
+                "time": "2026:05:01 14:30:22",
+                "source": "filename",
+                "score": "",
+                "drift": "-7200",
+            },
         ]
 
     def test_timeline_contains_days_and_badges(self, tmp_path):
@@ -68,9 +99,17 @@ class TestTimeline:
         assert "DRY-RUN PREVIEW" in target.read_text(encoding="utf-8")
 
     def test_html_escaped_names(self, tmp_path):
-        rows = [{"folder": "<script>alert(1)</script>", "rule": "default",
-                 "file": "x<y>.jpg", "time": "2026:05:01 09:00:00",
-                 "source": "plan", "score": "", "drift": ""}]
+        rows = [
+            {
+                "folder": "<script>alert(1)</script>",
+                "rule": "default",
+                "file": "x<y>.jpg",
+                "time": "2026:05:01 09:00:00",
+                "source": "plan",
+                "score": "",
+                "drift": "",
+            }
+        ]
         target = tmp_path / "timeline.html"
         write_timeline(rows, str(target), dry_run=False)
         html = target.read_text(encoding="utf-8")
