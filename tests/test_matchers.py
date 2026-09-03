@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 import pytest
 
 from exif_resync import HashMatcher, build_matcher

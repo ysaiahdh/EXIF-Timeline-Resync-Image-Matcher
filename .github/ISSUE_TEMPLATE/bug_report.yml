@@ -1,0 +1,39 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Exact command(s) run. Do not attach private photos — reproduce with generated images if possible.
+      placeholder: |
+        python exif_resync.py -d ./photos --dry-run
+        ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Full error output
+      render: shell
+  - type: input
+    id: matcher
+    attributes:
+      label: Matcher in use
+      description: auto, resnet, hash, off, or n/a
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version (`python --version`), ExifTool version (`exiftool -ver`).
+      placeholder: Ubuntu 24.04, Python 3.12, ExifTool 12.76
+    validations:
+      required: true

@@ -350,18 +350,21 @@ videos are out of scope for now.
 
 ## 🤝 Contributing
 
-Bug reports and pull requests are welcome. There is a test suite — please
-include a test when you fix or add something:
+Bug reports and pull requests are welcome! Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) first — it covers the dev setup, the
+issue/PR templates, and the rules that keep both READMEs in sync.
+
+Quick check before pushing:
 
 ```bash
-pip install pytest Pillow ImageHash
 python -m pytest tests/
 ruff check exif_resync.py wizard.py tests/
 ruff format --check exif_resync.py wizard.py tests/
 ```
 
-CI runs ruff plus the tests on Linux and Windows across Python 3.9–3.13.
-Have a look at `explain.md` if you want the full internals before diving in.
+> [!NOTE]
+> Found a security vulnerability? Do **not** open a public issue — see
+> [SECURITY.md](SECURITY.md) for private reporting.
 
 ## 📄 License
 

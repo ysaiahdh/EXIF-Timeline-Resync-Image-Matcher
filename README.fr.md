@@ -361,19 +361,21 @@ vidéos sont hors périmètre pour l'instant.
 
 ## 🤝 Contribuer
 
-Les retours de bugs et les pull requests sont bienvenus. Il y a une suite de
-tests — joignez donc un test quand vous corrigez ou ajoutez quelque chose :
+Les retours de bugs et les pull requests sont bienvenus ! Lisez d'abord
+[CONTRIBUTING.md](CONTRIBUTING.md) — installation dev, modèles d'issues et de
+PR, et règles pour garder les deux README synchronisés.
+
+Vérification rapide avant de pousser :
 
 ```bash
-pip install pytest Pillow ImageHash
 python -m pytest tests/
 ruff check exif_resync.py wizard.py tests/
 ruff format --check exif_resync.py wizard.py tests/
 ```
 
-La CI lance ruff ainsi que les tests sous Linux et Windows pour Python 3.9 à
-3.13. Jetez un œil à `explain.md` pour comprendre les entrailles avant de
-vous lancer.
+> [!NOTE]
+> Une faille de sécurité ? N'ouvrez **pas** d'issue publique — voir
+> [SECURITY.md](SECURITY.md) pour un signalement privé.
 
 ## 📄 Licence
 

@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose an idea or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that you currently can't?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: If you have one in mind. Note how it should behave in --dry-run, --wizard, and --undo.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: docs
+    attributes:
+      label: Docs impact
+      options:
+        - label: I understand README.md and README.fr.md must stay in sync

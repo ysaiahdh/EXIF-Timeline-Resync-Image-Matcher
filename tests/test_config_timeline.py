@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 import json
 
 from exif_resync import check_config, fmt_delta, parse_folder_date, write_timeline
