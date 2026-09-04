@@ -55,7 +55,7 @@ report you can replay with `--undo` if you don't like the result.
   ──────────────────────────────────────────────────────────────────
   IMG_001.jpg  📥 June 2026 (download)  →  📅 2026:05:01 09:00:00 · plan
   IMG_002.jpg  📥 June 2026 (download)  →  📅 2026:05:01 09:03:30 · plan
-  IMG_003.jpg  📥 June 2026 (download)  →  📅 2026:05:01 14:30:22 · filename 🤖
+  IMG_003.jpg  📥 June 2026 (download)  →  📅 2026:05:01 14:30:22 · filename
 ```
 
 ## ✨ What it can do

@@ -57,7 +57,7 @@ plaît pas.
   ──────────────────────────────────────────────────────────────────
   IMG_001.jpg  📥 juin 2026 (téléchargement)  →  📅 01/05/2026 09:00:00 · plan
   IMG_002.jpg  📥 juin 2026 (téléchargement)  →  📅 01/05/2026 09:03:30 · plan
-  IMG_003.jpg  📥 juin 2026 (téléchargement)  →  📅 01/05/2026 14:30:22 · nom 🤖
+  IMG_003.jpg  📥 juin 2026 (téléchargement)  →  📅 01/05/2026 14:30:22 · nom
 ```
 
 ## ✨ Ce qu'il sait faire

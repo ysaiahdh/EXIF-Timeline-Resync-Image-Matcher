@@ -24,10 +24,43 @@ photos/
 
 ---
 
+## Architecture
+
+The code is a flat `exif_resync` package (no `src/` layout, so a fresh clone
+runs with zero install via `python -m exif_resync`). Each module owns one
+concern; `__init__.py` re-exports the public API so `import exif_resync`
+keeps working:
+
+```
+exif_resync/
+├── __init__.py    version + public re-exports (58 names)
+├── __main__.py    `python -m exif_resync` entry point
+├── cli.py         argparse + top-level dispatch (main)
+├── config.py      config load / validation / normalization (EN + FR keys)
+├── parsing.py     folder & filename dates, keywords, album discovery
+├── exiftool.py    ExifTool discovery, batched -j reads, tag writes
+├── matchers.py    ResNet / hash engines, reference gallery, vector cache
+├── process.py     pipeline: scheduling, matching, drift, reports, timeline
+├── undo.py        report restoration (--undo)
+├── util.py        fmt_delta, optional tqdm progress helper
+└── wizard.py      interactive menu (same core functions as the flags)
+tests/             mirrors the package: parsing, schedule, matchers,
+                   report/undo, timeline, wizard, entry point
+```
+
+Rules of the road: core stays **stdlib-only** (heavy deps are optional and
+import-guarded); the wizard and the flags must behave identically because
+they call the same functions; `--dry-run` must never write files; anything
+touching untrusted input (folder names, EXIF blobs, CSV reports) needs a
+regression test.
+
+---
+
 ## 1. Folder discovery & date parsing
 
-Only **direct sub-folders** of `-d/--directory` are scanned (one folder =
-one album = one day). A folder is considered dated if its name contains a
+By default, only **direct sub-folders** of `-d/--directory` are scanned (one
+folder = one album = one day); `--recursive` descends into nested
+directories too. A folder is considered dated if its name contains a
 pattern matching:
 
 ```regex
