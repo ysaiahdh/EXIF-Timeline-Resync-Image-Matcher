@@ -53,7 +53,7 @@ ExifTool is only needed for end-to-end runs; the test suite mocks it, and
 
 ## Release process (maintainers)
 
-1. Bump `__version__` in `exif_resync.py` and `version` in `pyproject.toml`
+1. Bump `__version__` in `exif_resync/__init__.py` and `version` in `pyproject.toml`
    (single source of truth is manual — keep both in sync).
 2. Add a `CHANGELOG.md` entry.
 3. Commit, tag `vX.Y.Z`, push the tag: the release workflow builds the zip

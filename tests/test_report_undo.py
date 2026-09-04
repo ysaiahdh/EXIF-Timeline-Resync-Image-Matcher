@@ -67,8 +67,8 @@ def photo_tree(tmp_path):
 def run_process(tmp_path, config_path, fake_tool, monkeypatch, **kwargs):
     import exif_resync
 
-    monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
-    monkeypatch.setattr(exif_resync.subprocess, "run", fake_tool)
+    monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: "mock-exiftool")
+    monkeypatch.setattr("subprocess.run", fake_tool)
     return process_photos(str(tmp_path), str(config_path), matcher_mode="off", **kwargs)
 
 
@@ -126,12 +126,11 @@ class TestReportAndUndoRoundTrip:
             assert restored[3] == "old text"
 
     def test_undo_missing_file_reports_failure(self, photo_tree, monkeypatch, capsys):
-        import exif_resync
 
         tmp_path, _ = photo_tree
         fake = FakeExifTool()
         fake.current = {}
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr("subprocess.run", fake)
 
         report = tmp_path / "stale.csv"
         with open(report, "w", newline="", encoding="utf-8") as f:
@@ -167,8 +166,8 @@ class TestReportAndUndoRoundTrip:
         path = str(tmp_path / "01-06 Parc" / "a.jpg")
         fake = FakeExifTool()
         fake.current = {path: ["-", "-", "-", "line one\nline two"]}
-        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr("subprocess.run", fake)
 
         tags = exif_resync.read_current_tags("mock-exiftool", path)
         assert tags == ["-", "-", "-", "line one\nline two"]
@@ -191,11 +190,10 @@ class TestReportAndUndoRoundTrip:
         assert all(r["new_imagedescription"] == "keep me" for r in rows)
 
     def test_undo_dry_run_writes_nothing(self, photo_tree, monkeypatch, capsys):
-        import exif_resync
 
         tmp_path, _ = photo_tree
         fake = FakeExifTool()
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr("subprocess.run", fake)
 
         report = tmp_path / "r.csv"
         with open(report, "w", newline="", encoding="utf-8") as f:

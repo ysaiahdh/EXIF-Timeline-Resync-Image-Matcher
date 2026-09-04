@@ -7,8 +7,8 @@
 <!-- Commands run and their result, e.g. -->
 
 - [ ] `python -m pytest tests/` passes
-- [ ] `ruff check exif_resync.py wizard.py tests/` passes
-- [ ] `ruff format --check exif_resync.py wizard.py tests/` passes
+- [ ] `ruff check exif_resync tests/` passes
+- [ ] `ruff format --check exif_resync tests/` passes
 - [ ] New/changed behavior covered by tests
 
 ## Docs

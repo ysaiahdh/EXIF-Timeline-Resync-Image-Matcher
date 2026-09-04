@@ -5,7 +5,7 @@
 
 Step-by-step prompts (directory, year, schedule, reference photos, preview,
 confirm) with colored output and a progress bar. Standard library only, so
-`python exif_resync.py --wizard` works anywhere the base tool does.
+`python -m exif_resync --wizard` works anywhere the base tool does.
 """
 
 import json
@@ -363,7 +363,7 @@ def guided_resync(input_func):
         return rc
     report_path = os.path.join(root_dir, "exif_resync_report.csv")
     print(paint(f"Done! Report: {report_path}", "green"))
-    print(f"Changed your mind? Restore with: python exif_resync.py --undo {report_path}")
+    print(f"Changed your mind? Restore with: python -m exif_resync --undo {report_path}")
     return 0
 
 

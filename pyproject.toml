@@ -35,15 +35,15 @@ progress = ["tqdm"]
 dev = ["pytest", "ruff"]
 
 [project.scripts]
-exif-resync = "exif_resync:main"
+exif-resync = "exif_resync.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher"
 Documentation = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher#readme"
 Issues = "https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher/issues"
 
-[tool.setuptools]
-py-modules = ["exif_resync", "wizard"]
+[tool.setuptools.packages.find]
+include = ["exif_resync*"]
 
 [tool.ruff]
 line-length = 100

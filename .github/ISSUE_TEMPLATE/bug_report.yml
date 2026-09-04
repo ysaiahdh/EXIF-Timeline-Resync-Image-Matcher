@@ -15,7 +15,7 @@ body:
       label: How to reproduce
       description: Exact command(s) run. Do not attach private photos — reproduce with generated images if possible.
       placeholder: |
-        python exif_resync.py -d ./photos --dry-run
+        python -m exif_resync -d ./photos --dry-run
         ...
     validations:
       required: true

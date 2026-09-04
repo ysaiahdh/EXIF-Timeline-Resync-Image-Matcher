@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Restructure the code into the `exif_resync` package (`config`, `parsing`,
+  `exiftool`, `matchers`, `process`, `undo`, `wizard`, `cli`, `util`).
+  Run it with `python -m exif_resync` (or the installed `exif-resync`
+  command) instead of `python exif_resync.py`. No behavior changes.
+
 ## [2.1.0] — 2026-09-03
 
 ### Added

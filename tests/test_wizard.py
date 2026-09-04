@@ -7,8 +7,8 @@ from datetime import datetime
 import pytest
 
 import exif_resync
-import wizard
-from wizard import (
+from exif_resync import wizard
+from exif_resync.wizard import (
     ask,
     ask_choice,
     ask_yes_no,
@@ -352,8 +352,8 @@ class TestCoreHelpers:
         config = tmp_path / "config.json"
         config.write_text('{"year": 2026}')
         fake = test_report_undo.FakeExifTool()
-        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr("subprocess.run", fake)
 
         seen = []
         rc = exif_resync.process_photos(

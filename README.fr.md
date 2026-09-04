@@ -107,7 +107,7 @@ Clonez et lancez, c'est tout :
 ```bash
 git clone https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher.git
 cd EXIF-Timeline-Resync-Image-Matcher
-python exif_resync.py --help
+python -m exif_resync --help
 ```
 
 Une installation classique fonctionne aussi :
@@ -122,7 +122,7 @@ exif-resync --help
 Pas envie de retenir les options ? Lancez l'assistant interactif :
 
 ```bash
-python exif_resync.py --wizard
+python -m exif_resync --wizard
 ```
 
 Il vous guide en cinq étapes :
@@ -183,16 +183,16 @@ plutôt qu'un plantage en pleine exécution.
 Puis simulez, appliquez, et contrôlez :
 
 ```bash
-python exif_resync.py -d ./photos --check-config   # vérification, ne touche à rien
-python exif_resync.py -d ./photos --dry-run --timeline
-python exif_resync.py -d ./photos
+python -m exif_resync -d ./photos --check-config   # vérification, ne touche à rien
+python -m exif_resync -d ./photos --dry-run --timeline
+python -m exif_resync -d ./photos
 open photos/timeline.html      # voir ce qui a été écrit
 ```
 
 Vous avez changé d'avis ?
 
 ```bash
-python exif_resync.py --undo ./photos/exif_resync_report.csv
+python -m exif_resync --undo ./photos/exif_resync_report.csv
 ```
 
 L'annulation restaure exactement les valeurs précédentes, y compris la
@@ -232,7 +232,7 @@ Si vous étiez là aussi et que vos clichés ont encore des dates EXIF correctes
 montrez-les à l'outil :
 
 ```bash
-python exif_resync.py -d ./photos -r ./mes_photos_reference
+python -m exif_resync -d ./photos -r ./mes_photos_reference
 ```
 
 Chaque téléchargement est comparé à toutes les photos de référence. Quand la
@@ -252,7 +252,7 @@ d'eau — dans un même album comme entre dossiers différents. Pas de photos de
 référence sous la main ? `--duplicates` lance juste cette comparaison :
 
 ```bash
-python exif_resync.py -d ./photos --duplicates --matcher hash
+python -m exif_resync -d ./photos --duplicates --matcher hash
 ```
 
 Les photos de référence ne sont analysées qu'une fois et mises en cache à
@@ -268,7 +268,7 @@ est aussi signalée pendant les prévisualisations `--dry-run` dès qu'ExifTool
 est installé. Rien ne bouge sans votre accord :
 
 ```bash
-python exif_resync.py -d ./photos --sync-clocks
+python -m exif_resync -d ./photos --sync-clocks
 ```
 
 Cette option décale tout l'album de l'écart médian détecté. Les horodatages
@@ -301,7 +301,7 @@ la chronologie est écrite à côté du rapport plutôt que dans le dossier phot
 <summary><b>Cliquez pour déplier la liste complète des options</b></summary>
 
 ```
-python exif_resync.py [-d DOSSIER] [-c CONFIG] [-r REFERENCE]
+python -m exif_resync [-d DOSSIER] [-c CONFIG] [-r REFERENCE]
                       [--matcher {auto,resnet,hash,off}] [--match-threshold FLOTTANT]
                       [--duplicates] [--duplicate-threshold FLOTTANT] [--recursive]
                       [--sync-clocks] [--sync-mtime]
@@ -369,8 +369,8 @@ Vérification rapide avant de pousser :
 
 ```bash
 python -m pytest tests/
-ruff check exif_resync.py wizard.py tests/
-ruff format --check exif_resync.py wizard.py tests/
+ruff check exif_resync tests/
+ruff format --check exif_resync tests/
 ```
 
 > [!NOTE]

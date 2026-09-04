@@ -58,7 +58,7 @@ def test_build_matcher_off_is_none():
 def test_build_matcher_auto_falls_back_gracefully(monkeypatch):
     import exif_resync
 
-    monkeypatch.setattr(exif_resync, "HAS_VISION", False)
+    monkeypatch.setattr(exif_resync.matchers, "HAS_VISION", False)
     if exif_resync.HAS_PILLOW and exif_resync.HAS_IMAGEHASH:
         matcher = build_matcher("auto")
         assert isinstance(matcher, HashMatcher)
@@ -69,8 +69,8 @@ def test_build_matcher_auto_falls_back_gracefully(monkeypatch):
 def test_build_matcher_explicit_without_deps_exits(monkeypatch):
     import exif_resync
 
-    monkeypatch.setattr(exif_resync, "HAS_VISION", False)
-    monkeypatch.setattr(exif_resync, "HAS_PILLOW", False)
+    monkeypatch.setattr(exif_resync.matchers, "HAS_VISION", False)
+    monkeypatch.setattr(exif_resync.matchers, "HAS_PILLOW", False)
     with pytest.raises(SystemExit):
         build_matcher("resnet")
 
@@ -103,8 +103,8 @@ class TestDuplicateOnlyMode:
 
         config = self._two_albums(tmp_path)
         fake = FakeExifTool()
-        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr("subprocess.run", fake)
 
         rc = exif_resync.process_photos(
             str(tmp_path), str(config), matcher_mode="hash", duplicates=True
@@ -121,8 +121,8 @@ class TestDuplicateOnlyMode:
 
         config = self._two_albums(tmp_path)
         fake = FakeExifTool()
-        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: "mock-exiftool")
-        monkeypatch.setattr(exif_resync.subprocess, "run", fake)
+        monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: "mock-exiftool")
+        monkeypatch.setattr("subprocess.run", fake)
 
         rc = exif_resync.process_photos(
             str(tmp_path), str(config), matcher_mode="hash", duplicates=True, dry_run=True

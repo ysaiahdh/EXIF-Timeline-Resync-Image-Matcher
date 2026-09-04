@@ -101,7 +101,7 @@ Clone and run, that's really it:
 ```bash
 git clone https://github.com/YsaiahDH/EXIF-Timeline-Resync-Image-Matcher.git
 cd EXIF-Timeline-Resync-Image-Matcher
-python exif_resync.py --help
+python -m exif_resync --help
 ```
 
 If you prefer a proper install, this works too:
@@ -116,7 +116,7 @@ exif-resync --help
 Don't want to memorize flags? Run the interactive wizard:
 
 ```bash
-python exif_resync.py --wizard
+python -m exif_resync --wizard
 ```
 
 It walks you through five steps:
@@ -175,16 +175,16 @@ a clear error instead of crashing halfway through a run.
 Then preview, apply, and verify:
 
 ```bash
-python exif_resync.py -d ./photos --check-config   # sanity check, touches nothing
-python exif_resync.py -d ./photos --dry-run --timeline
-python exif_resync.py -d ./photos
+python -m exif_resync -d ./photos --check-config   # sanity check, touches nothing
+python -m exif_resync -d ./photos --dry-run --timeline
+python -m exif_resync -d ./photos
 open photos/timeline.html      # see what was written
 ```
 
 Changed your mind?
 
 ```bash
-python exif_resync.py --undo ./photos/exif_resync_report.csv
+python -m exif_resync --undo ./photos/exif_resync_report.csv
 ```
 
 The undo restores the previous values exactly, including removing tags that
@@ -223,7 +223,7 @@ If you were there too and your own shots still have correct EXIF dates, point
 the tool at them:
 
 ```bash
-python exif_resync.py -d ./photos -r ./my_reference_photos
+python -m exif_resync -d ./photos -r ./my_reference_photos
 ```
 
 Each download gets compared to every reference photo. When the best match is
@@ -243,7 +243,7 @@ well as across different folders. No reference photos handy? `--duplicates`
 runs just that comparison on its own:
 
 ```bash
-python exif_resync.py -d ./photos --duplicates --matcher hash
+python -m exif_resync -d ./photos --duplicates --matcher hash
 ```
 
 Reference photos are embedded once and cached next to your reference folder,
@@ -259,7 +259,7 @@ reported during `--dry-run` previews whenever ExifTool is installed.
 Nothing changes unless you ask for it:
 
 ```bash
-python exif_resync.py -d ./photos --sync-clocks
+python -m exif_resync -d ./photos --sync-clocks
 ```
 
 That flag shifts the whole album by the median offset. Timestamps taken from
@@ -291,7 +291,7 @@ photo folder.
 <summary><b>Click to expand the full option list</b></summary>
 
 ```
-python exif_resync.py [-d DIRECTORY] [-c CONFIG] [-r REFERENCE]
+python -m exif_resync [-d DIRECTORY] [-c CONFIG] [-r REFERENCE]
                       [--matcher {auto,resnet,hash,off}]
                       [--match-threshold FLOAT] [--duplicates]
                       [--duplicate-threshold FLOAT] [--recursive]
@@ -358,8 +358,8 @@ Quick check before pushing:
 
 ```bash
 python -m pytest tests/
-ruff check exif_resync.py wizard.py tests/
-ruff format --check exif_resync.py wizard.py tests/
+ruff check exif_resync tests/
+ruff format --check exif_resync tests/
 ```
 
 > [!NOTE]

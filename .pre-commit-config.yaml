@@ -3,9 +3,9 @@ repos:
     rev: v0.12.12
     hooks:
       - id: ruff-check
-        args: [exif_resync.py, wizard.py, tests/]
+        args: [exif_resync, tests/]
       - id: ruff-format-check
-        args: [exif_resync.py, wizard.py, tests/]
+        args: [exif_resync, tests/]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

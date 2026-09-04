@@ -15,7 +15,7 @@ jobs:
       - name: Build source zip (without dev files)
         run: |
           zip -r exif-timeline-resync-${{ github.ref_name }}.zip \
-            exif_resync.py wizard.py README.md README.fr.md explain.md \
+            exif_resync README.md README.fr.md explain.md \
             CHANGELOG.md config.example.json requirements.txt pyproject.toml LICENSE
 
       - name: Create GitHub Release

@@ -1,6 +1,6 @@
 # How EXIF Timeline Resync Works
 
-This document explains what happens inside `exif_resync.py`: how capture
+This document explains what happens inside the `exif_resync` package: how capture
 times are reconstructed, how each time source wins or loses against the
 others, how the two matching engines decide that two photos show the same
 moment, and how the report / undo system keeps everything reversible.
@@ -188,7 +188,7 @@ dependencies and works offline.
 
 ## 9. Guided mode (`--wizard`)
 
-`wizard.py` layers an interactive menu on top of the same primitives: it
+`exif_resync/wizard.py` layers an interactive menu on top of the same primitives: it
 reuses `summarize_albums` for the album table, `parse_time_value` for
 validating typed times, and calls `process_photos` twice (dry-run preview,
 then apply after an explicit confirmation defaulting to "no"). A

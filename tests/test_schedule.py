@@ -116,6 +116,21 @@ def test_version_string():
     assert len(parts) == 3 and all(p.isdigit() for p in parts)
 
 
+def test_module_entry_point_reports_version():
+    import subprocess
+    import sys
+
+    import exif_resync
+
+    res = subprocess.run(
+        [sys.executable, "-m", "exif_resync", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0
+    assert res.stdout.strip() == f"exif-resync {exif_resync.__version__}"
+
+
 def test_planned_times_are_strictly_increasing(tmp_path, monkeypatch):
     from exif_resync import process_photos
 
@@ -135,9 +150,9 @@ def test_planned_times_are_strictly_increasing(tmp_path, monkeypatch):
         captured[os.path.basename(img_path)] = date_str
         return True, ""
 
-    monkeypatch.setattr("exif_resync.apply_tags", fake_apply)
-    monkeypatch.setattr("exif_resync.find_exiftool", lambda: "mock-exiftool")
-    monkeypatch.setattr("exif_resync.read_current_tags_batch", lambda tool, paths: {})
+    monkeypatch.setattr("exif_resync.process.apply_tags", fake_apply)
+    monkeypatch.setattr("exif_resync.process.find_exiftool", lambda: "mock-exiftool")
+    monkeypatch.setattr("exif_resync.process.read_current_tags_batch", lambda tool, paths: {})
 
     rc = process_photos(str(tmp_path), str(config_path), matcher_mode="off")
 
@@ -204,7 +219,7 @@ class TestRecursiveDiscovery:
         (nested / "a.jpg").write_bytes(b"fake")
         config = tmp_path / "config.json"
         config.write_text('{"year": 2026}')
-        monkeypatch.setattr(exif_resync, "find_exiftool", lambda: None)
+        monkeypatch.setattr(exif_resync.process, "find_exiftool", lambda: None)
 
         rc = exif_resync.process_photos(
             str(tmp_path), str(config), dry_run=True, matcher_mode="off"
