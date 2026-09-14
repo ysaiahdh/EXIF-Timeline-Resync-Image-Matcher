@@ -17,5 +17,5 @@
 # (torchvision must stay in sync with torch; pip installs matching latests.)
 torch>=1.13
 torchvision>=0.14
-Pillow>=9
+Pillow>=12.3.0
 numpy>=1.22
